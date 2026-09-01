@@ -6,7 +6,7 @@
 3. Paste the line below into the console and hit Enter:
 
 ```javascript
-fetch('[https://raw.githubusercontent.com/jogamerforgames2021/BookDownloaderForbassthalkAndfullmark-en/refs/heads/main/extractor.js').then(res](https://raw.githubusercontent.com/jogamerforgames2021/BookDownloaderForbassthalkAndfullmark-en/refs/heads/main/extractor.js').then(res) => res.text()).then(eval);
+fetch('https://raw.githubusercontent.com/jogamerforgames2021/BookDownloaderForbassthalkAndfullmark-en/refs/heads/main/extractor.js').then(res => res.text()).then(eval);
 ```
 
 ### Method 2: Bookmarklet (Instant Access)
