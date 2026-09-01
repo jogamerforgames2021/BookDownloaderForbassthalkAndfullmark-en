@@ -17,5 +17,5 @@ If you do not want to open the console every time:
 3. Paste this exact code into the URL / Location box:
 
 ```javascript
-javascript:(function(){fetch('[https://raw.githubusercontent.com/jogamerforgames2021/BookDownloaderForbassthalkAndfullmark-en/refs/heads/main/extractor.js').then(function(r](https://raw.githubusercontent.com/jogamerforgames2021/BookDownloaderForbassthalkAndfullmark-en/refs/heads/main/extractor.js').then(function(r)){return r.text();}).then(function(code){eval(code);});})();
+javascript:(function(){var u='https:'+'//raw.githubusercontent.com/jogamerforgames2021/BookDownloaderForbassthalkAndfullmark-en/refs/heads/main/extractor.js';fetch(u).then(function(r){return r.text();}).then(function(c){eval(c);});})();
 ```
