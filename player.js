@@ -143,97 +143,31 @@
     inkBox.style.display = 'block';
     inkContainer.innerHTML = '';
 
-    // On a video page the site has already initialized the Inkrypt SDK under
-    // the real (Firefox) UA, and the SDK caches its "Chrome Desktop only"
-    // verdict (x106) at init time — a later parent-page UA spoof is ignored.
-    // We therefore host the player in an isolated same-origin subframe: there
-    // we spoof the Chrome UA first, then load a fresh copy of ink.js so the
-    // gate is evaluated against the spoofed UA with no prior site copy around.
-    const fr = document.createElement('iframe');
-    fr.style.cssText = 'width:100%; height:100%; border:0; background:#000;';
-    fr.id = 'video-ink-frame';
-    inkContainer.appendChild(fr);
-
-    const frameLoader = `
-      (function () {
-        var chromeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-        var def = function (obj, prop, val) {
-          try { Object.defineProperty(obj, prop, { configurable: true, get: function () { return val; } }); } catch (e) {}
-        };
-        def(navigator, 'userAgent', chromeUA);
-        def(navigator, 'appVersion', chromeUA.replace('Mozilla/', ''));
-        def(navigator, 'platform', 'Win32');
-        def(navigator, 'vendor', 'Google Inc.');
-        if (navigator.userAgentData !== undefined || 'userAgentData' in navigator) {
-          try {
-            Object.defineProperty(navigator, 'userAgentData', { configurable: true, get: function () {
-              return {
-                brands: [
-                  { brand: 'Not/A)Brand', version: '24' },
-                  { brand: 'Chromium', version: '124' },
-                  { brand: 'Google Chrome', version: '124.0.0.0' }
-                ],
-                mobile: false,
-                platform: 'Windows',
-                getHighEntropyValues: function () {
-                  return Promise.resolve({
-                    architecture: 'x64', platform: 'Windows', platformVersion: '10.0',
-                    uaFullVersion: '124.0.0.0', fullVersionList: [
-                      { brand: 'Not/A)Brand', version: '24.0.0.0' },
-                      { brand: 'Chromium', version: '124.0.0.0' },
-                      { brand: 'Google Chrome', version: '124.0.0.0' }
-                    ]
-                  });
-                }
-              };
-            } });
-          } catch (e) {}
-        }
-        window.inkrypt = {};
-        window.inkrypt.add = function (j) { (window.inkrypt.a = window.inkrypt.a || []).push(j); };
-        var host = document.getElementById('inkHost');
-        var s = document.createElement('script');
-        s.async = true;
-        s.src = 'https://resource.inkryptvideos.com/v2-a83ns52/ink.js';
-        s.onerror = function () { parent.postMessage({ inkStatus: 'error' }, '*'); };
-        document.head.appendChild(s);
-        var tries = 0;
-        var t = setInterval(function () {
-          if (window.inkrypt && typeof window.inkrypt.getObjects === 'function') {
-            clearInterval(t);
-            window.inkrypt.add({
-              video_id: '${video.source}',
-              otp: '${(otp.otp || '').replace(/'/g, "\\\\'")}',
-              api: 'api',
-              license: 'license',
-              config: ${JSON.stringify(JSON.stringify(otp.configuration || {}))},
-              container: host
-            });
-          } else if (++tries > 120) {
-            clearInterval(t);
-            parent.postMessage({ inkStatus: 'error' }, '*');
-          }
-        }, 250);
-      })();
-    `;
-
-    const doc = fr.contentDocument;
-    if (doc && doc.readyState === 'complete') {
-      runInkFrame(doc);
-    } else {
-      fr.onload = () => runInkFrame(fr.contentDocument);
-    }
-    function runInkFrame(d) {
-      d.open();
-      d.write('<!doctype html><html><head><meta charset="utf-8"></head><body><div id="inkHost" style="width:100%;height:100%;border:0;margin:0"></div></body></html>');
-      d.close();
-      const s = d.createElement('script');
-      s.textContent = frameLoader;
-      d.body.appendChild(s);
-    }
-
-    statusEl.textContent = '✅ يتم الآن تشغيل الفيديو (Inkrypt).';
-    statusEl.style.color = '#a6e3a1';
+    // The actual playback happens inside Inkrypt's own cross-origin player
+    // frame (resource.inkryptvideos.com/.../emb/index.html). That frame's
+    // x106 "Chrome Desktop only" gate cannot be spoofed from this page. It is
+    // solved by installing the bundled "Inkrypt UA Fix" userscript
+    // (inkrypt-ua-fix.user.js), which spoofs the UA inside that frame before
+    // ink.js evaluates. Here we only need to build the player like the site
+    // does: reuse the initialized SDK (or load a fresh copy) and queue add().
+    spoofChromeUA();
+    loadInkSdk((err) => {
+      if (err) {
+        statusEl.textContent = err.message;
+        statusEl.style.color = '#f38ba8';
+        return;
+      }
+      statusEl.textContent = '✅ يتم الآن تشغيل الفيديو (Inkrypt).';
+      statusEl.style.color = '#a6e3a1';
+      window.inkrypt.add({
+        video_id: video.source,
+        otp: otp.otp,
+        api: 'api',
+        license: 'license',
+        config: JSON.stringify(otp.configuration || {}),
+        container: inkContainer
+      });
+    });
   }
 
   const existing = document.getElementById('video-dynamic-player');

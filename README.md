@@ -54,7 +54,7 @@ javascript:(function(){var u='https:'+'//raw.githubusercontent.com/jogamerforgam
 - Plays **all three video types** found in courses:
   - **YouTube** — embedded directly.
   - **VdoCipher** — fetches the video's `otp`/`playbackInfo` for **your** session and loads the official VdoCipher player.
-  - **Inkrypt (`ink`)** — builds the player exactly like the site does, with a Chromium user-agent so it plays in **any browser** (the site's own player refuses Firefox with error x106, even for paid owners of the course).
+  - **Inkrypt (`ink`)** — builds the player exactly like the site does, so it plays on the official Inkrypt player. **Note:** Inkrypt's own player frame blocks Firefox with error `x106` ("Please use (Chrome) Desktop browser"), even for paid owners of the course. To play Inkrypt videos in Firefox, also install the bundled `inkrypt-ua-fix.user.js` script into Tampermonkey/Greasemonkey — it spoofs a Chrome UI inside the Inkrypt player frame before the check runs (see [Inkrypt in Firefox](#inkrypt-in-firefox)).
 - Shows clear errors if the token is expired (401), the video isn't unlocked yet, or the OTP is missing/locked.
 
 ---
@@ -184,6 +184,18 @@ python notifier.py --reset                               # clear the baseline (n
 - `state.json` is **updated after every single course** and written **atomically** (temp file + rename), so a crash or Ctrl+C mid-run can never corrupt it.
 - Interrupted runs just skip whatever they hadn't finished; run it again to continue from where it stopped.
 - No duplicate notifications: anything already reported is recorded in the baseline and won't re-trigger.
+
+## Inkrypt in Firefox
+
+Inkrypt videos play in Chrome/Edge out of the box. In **Firefox**, the site refuses playback with `Movie Player error x106: Please use (Chrome) Desktop browser` — even for the course owner. The check runs inside Inkrypt's own cross-origin player frame, so the bookmarklet cannot override it. Fix:
+
+1. Install **Tampermonkey** (or Greasemonkey) in Firefox.
+2. Open the bundled userscript `inkrypt-ua-fix.user.js`.
+3. Fire up the video with the bookmarklet as usual.
+
+The userscript matches `https://resource.inkryptvideos.com/*` and sets a Chrome desktop UA (plus Chrome `userAgentData`) *before* the Inkrypt player code evaluates, so the x106 gate passes. It also fixes the site's own embedded player in Firefox, not just the bookmarklet.
+
+---
 
 ## Notes
 
