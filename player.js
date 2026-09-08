@@ -209,8 +209,7 @@
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/json'
-      },
-      credentials: 'include'
+      }
     });
 
     if (res.status === 401) {
@@ -293,13 +292,20 @@
       statusEl.style.color = '#a6adc8';
 
       try {
-        const detailRes = await fetch(`${apiBaseUrl}/api/sellables/course/${courseId}/sections/${video.sectionId}/sectionables/${video.id}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          },
-          credentials: 'include'
-        });
+        const ac = new AbortController();
+        const timeoutId = setTimeout(() => ac.abort(), 20000);
+        let detailRes;
+        try {
+          detailRes = await fetch(`${apiBaseUrl}/api/sellables/course/${courseId}/sections/${video.sectionId}/sectionables/${video.id}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            },
+            signal: ac.signal
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
         if (detailRes.status === 401) {
           statusEl.textContent = "خطأ 401: التوكين غير صالح أو منتهي الصلاحية.";
