@@ -73,49 +73,40 @@
   let inkSdkLoading = false;
   function waitForInkSdk(cb) {
     let tries = 0;
-    const checkSdk = () => {
-      // A real instance exposes add() and not our marker stub. The stub we
-      // install also has .add, but the loader contract is that calling add()
-      // before init queues the job in .a for the SDK to process on load.
-      if (window.inkrypt && typeof window.inkrypt.add === 'function' && !window.inkrypt.__playerStub) {
+    const t = setInterval(() => {
+      // An initialized SDK exposes getObjects(). The loader stub we install
+      // while ink.js is still fetching does not have it yet.
+      if (window.inkrypt && typeof window.inkrypt.getObjects === 'function') {
         clearInterval(t);
+        inkSdkLoading = false;
         cb(null);
       } else if (++tries > 120) {
         clearInterval(t);
         inkSdkLoading = false;
         cb(new Error("لم يتم تحميل مشغل Inkrypt في الوقت المناسب."));
       }
-    };
-    const t = setInterval(checkSdk, 250);
+    }, 250);
   }
 
-  function loadInkSdkFresh(cb) {
-    if (inkSdkLoading) return waitForInkSdk(cb);
-
-    const realUA = String(window.navigator.userAgent || '');
-    const isChrome = /chrom(e|ium)/i.test(realUA);
-
-    // Reuse an already-initialized instance in Chrome (site's own player works).
-    if (isChrome && window.inkrypt && typeof window.inkrypt.add === 'function' && !window.inkrypt.__playerStub) {
+  function loadInkSdk(cb) {
+    if (window.inkrypt && typeof window.inkrypt.getObjects === 'function') {
+      // Already initialized (either the site's own instance on a video page,
+      // or a previous run). Reuse it: ink.js keeps the loader object and only
+      // fills it out, so re-injecting a second copy clashes (redeclaration
+      // errors) and never re-processes our queued job.
       return cb(null);
     }
+    if (inkSdkLoading) return waitForInkSdk(cb);
 
     inkSdkLoading = true;
-    // The Inkrypt SDK evaluates its "Chrome Desktop only" check (x106) using
-    // navigator.userAgent. When ink.js loads it expects to find the loader
-    // stub it was queued against (window.inkrypt.add / .a), and a page can
-    // hold at most one initialized instance. On a video page the site has
-    // usually already initialized it under the real (Firefox) UA, so we drop
-    // it, install a fresh stub matching the SDK's own loader contract, and
-    // re-inject ink.js so the gate is re-evaluated under our spoofed UA and
-    // our queued add() request is processed by the new instance.
-    try { delete window.inkrypt; } catch (e) {}
+    // No initialized SDK yet (we're on a course page the site hasn't touched).
+    // Install inkrypt's loader stub contract, then inject ink.js the same way
+    // the SDK's own embed page does.
     try {
       window.inkrypt = {};
       window.inkrypt.add = function (job) {
         (window.inkrypt.a = window.inkrypt.a || []).push(job);
       };
-      window.inkrypt.__playerStub = true;
     } catch (e) {}
 
     const s = document.createElement('script');
@@ -136,7 +127,7 @@
     inkContainer.innerHTML = '';
 
     spoofChromeUA();
-    loadInkSdkFresh((err) => {
+    loadInkSdk((err) => {
       if (err) {
         statusEl.textContent = err.message;
         statusEl.style.color = '#f38ba8';
