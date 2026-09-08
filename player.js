@@ -84,11 +84,17 @@
     }, 250);
   }
 
-  function loadInkSdk(cb) {
-    if (window.inkrypt && typeof window.inkrypt.add === 'function') return cb(null);
+  function loadInkSdkFresh(cb) {
     if (inkSdkLoading) return waitForInkSdk(cb);
 
     inkSdkLoading = true;
+    // The Inkrypt SDK evaluates its "Chrome Desktop only" check (x106) the
+    // moment it loads, using the real navigator.userAgent, and caches that
+    // verdict on window.inkrypt. On a video page the site has usually already
+    // loaded it under the real (Firefox) UA. To make it re-evaluate under our
+    // spoofed UA we must drop the existing instance and load a fresh copy.
+    try { delete window.inkrypt; } catch (e) { try { window.inkrypt = undefined; } catch (e2) {} }
+
     const s = document.createElement('script');
     s.async = true;
     s.src = 'https://resource.inkryptvideos.com/v2-a83ns52/ink.js';
@@ -104,7 +110,7 @@
     inkContainer.innerHTML = '';
 
     spoofChromeUA();
-    loadInkSdk((err) => {
+    loadInkSdkFresh((err) => {
       if (err) {
         statusEl.textContent = err.message;
         statusEl.style.color = '#f38ba8';
@@ -186,7 +192,8 @@
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/json'
-      }
+      },
+      credentials: 'include'
     });
 
     if (res.status === 401) {
@@ -273,7 +280,8 @@
           headers: {
             'Authorization': `Bearer ${token}`,
             'Accept': 'application/json'
-          }
+          },
+          credentials: 'include'
         });
 
         if (detailRes.status === 401) {
