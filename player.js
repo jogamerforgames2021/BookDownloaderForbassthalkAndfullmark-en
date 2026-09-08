@@ -73,32 +73,58 @@
   let inkSdkLoading = false;
   function waitForInkSdk(cb) {
     let tries = 0;
-    const t = setInterval(() => {
-      if (window.inkrypt && typeof window.inkrypt.add === 'function') {
+    const checkSdk = () => {
+      // A real instance exposes add() and not our marker stub. The stub we
+      // install also has .add, but the loader contract is that calling add()
+      // before init queues the job in .a for the SDK to process on load.
+      if (window.inkrypt && typeof window.inkrypt.add === 'function' && !window.inkrypt.__playerStub) {
         clearInterval(t);
         cb(null);
       } else if (++tries > 120) {
         clearInterval(t);
+        inkSdkLoading = false;
         cb(new Error("لم يتم تحميل مشغل Inkrypt في الوقت المناسب."));
       }
-    }, 250);
+    };
+    const t = setInterval(checkSdk, 250);
   }
 
   function loadInkSdkFresh(cb) {
     if (inkSdkLoading) return waitForInkSdk(cb);
 
+    const realUA = String(window.navigator.userAgent || '');
+    const isChrome = /chrom(e|ium)/i.test(realUA);
+
+    // Reuse an already-initialized instance in Chrome (site's own player works).
+    if (isChrome && window.inkrypt && typeof window.inkrypt.add === 'function' && !window.inkrypt.__playerStub) {
+      return cb(null);
+    }
+
     inkSdkLoading = true;
-    // The Inkrypt SDK evaluates its "Chrome Desktop only" check (x106) the
-    // moment it loads, using the real navigator.userAgent, and caches that
-    // verdict on window.inkrypt. On a video page the site has usually already
-    // loaded it under the real (Firefox) UA. To make it re-evaluate under our
-    // spoofed UA we must drop the existing instance and load a fresh copy.
-    try { delete window.inkrypt; } catch (e) { try { window.inkrypt = undefined; } catch (e2) {} }
+    // The Inkrypt SDK evaluates its "Chrome Desktop only" check (x106) using
+    // navigator.userAgent. When ink.js loads it expects to find the loader
+    // stub it was queued against (window.inkrypt.add / .a), and a page can
+    // hold at most one initialized instance. On a video page the site has
+    // usually already initialized it under the real (Firefox) UA, so we drop
+    // it, install a fresh stub matching the SDK's own loader contract, and
+    // re-inject ink.js so the gate is re-evaluated under our spoofed UA and
+    // our queued add() request is processed by the new instance.
+    try { delete window.inkrypt; } catch (e) {}
+    try {
+      window.inkrypt = {};
+      window.inkrypt.add = function (job) {
+        (window.inkrypt.a = window.inkrypt.a || []).push(job);
+      };
+      window.inkrypt.__playerStub = true;
+    } catch (e) {}
 
     const s = document.createElement('script');
     s.async = true;
     s.src = 'https://resource.inkryptvideos.com/v2-a83ns52/ink.js';
-    s.onerror = () => cb(new Error("تعذر تحميل مشغل Inkrypt."));
+    s.onerror = () => {
+      inkSdkLoading = false;
+      cb(new Error("تعذر تحميل مشغل Inkrypt."));
+    };
     document.head.appendChild(s);
     waitForInkSdk(cb);
   }
