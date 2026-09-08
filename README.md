@@ -51,7 +51,10 @@ javascript:(function(){var u='https:'+'//raw.githubusercontent.com/jogamerforgam
 ## What it does
 - Detects the platform from the page (bassthalk or fullmark) automatically.
 - Lists every **video** in the course, filtered by section.
-- On pick, fetches the video's `otp`/`playbackInfo` for **your** session and loads the official VdoCipher player into the panel.
+- Plays **all three video types** found in courses:
+  - **YouTube** — embedded directly.
+  - **VdoCipher** — fetches the video's `otp`/`playbackInfo` for **your** session and loads the official VdoCipher player.
+  - **Inkrypt (`ink`)** — builds the player exactly like the site does, with a Chromium user-agent so it plays in **any browser** (the site's own player refuses Firefox with error x106, even for paid owners of the course).
 - Shows clear errors if the token is expired (401), the video isn't unlocked yet, or the OTP is missing/locked.
 
 ---

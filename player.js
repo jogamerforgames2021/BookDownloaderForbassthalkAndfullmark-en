@@ -47,6 +47,82 @@
   }
   const courseId = match[1];
 
+  // The Inkrypt player SDK refuses non-Chrome browsers (error x106) based on
+  // navigator.userAgent. We present a Chrome UA before loading it so the
+  // DRM player (already licensed to this session) will play in any browser.
+  function spoofChromeUA() {
+    try {
+      const chromeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+      const def = (obj, prop, val) => {
+        try {
+          Object.defineProperty(obj, prop, { configurable: true, get: () => val });
+        } catch (e) {}
+      };
+      def(window.navigator, 'userAgent', chromeUA);
+      def(window.navigator, 'appVersion', chromeUA.replace('Mozilla/', ''));
+      def(window.navigator, 'platform', 'Win32');
+      def(window.navigator, 'vendor', 'Google Inc.');
+      if (window.navigator.userAgentData) {
+        try {
+          Object.defineProperty(window.navigator, 'userAgentData', { configurable: true, get: () => undefined });
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
+  let inkSdkLoading = false;
+  function waitForInkSdk(cb) {
+    let tries = 0;
+    const t = setInterval(() => {
+      if (window.inkrypt && typeof window.inkrypt.add === 'function') {
+        clearInterval(t);
+        cb(null);
+      } else if (++tries > 120) {
+        clearInterval(t);
+        cb(new Error("لم يتم تحميل مشغل Inkrypt في الوقت المناسب."));
+      }
+    }, 250);
+  }
+
+  function loadInkSdk(cb) {
+    if (window.inkrypt && typeof window.inkrypt.add === 'function') return cb(null);
+    if (inkSdkLoading) return waitForInkSdk(cb);
+
+    inkSdkLoading = true;
+    const s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://resource.inkryptvideos.com/v2-a83ns52/ink.js';
+    s.onerror = () => cb(new Error("تعذر تحميل مشغل Inkrypt."));
+    document.head.appendChild(s);
+    waitForInkSdk(cb);
+  }
+
+  function playInkrypt(video, otp) {
+    const inkBox = document.getElementById('video-ink-box');
+    const inkContainer = document.getElementById('video-ink-container');
+    inkBox.style.display = 'block';
+    inkContainer.innerHTML = '';
+
+    spoofChromeUA();
+    loadInkSdk((err) => {
+      if (err) {
+        statusEl.textContent = err.message;
+        statusEl.style.color = '#f38ba8';
+        return;
+      }
+      statusEl.textContent = '✅ يتم الآن تشغيل الفيديو (Inkrypt).';
+      statusEl.style.color = '#a6e3a1';
+      window.inkrypt.add({
+        video_id: video.source,
+        otp: otp.otp,
+        api: 'api',
+        license: 'license',
+        config: JSON.stringify(otp.configuration || {}),
+        container: inkContainer
+      });
+    });
+  }
+
   const existing = document.getElementById('video-dynamic-player');
   if (existing) existing.remove();
 
@@ -82,9 +158,13 @@
     </div>
 
     <div id="video-player-box" style="display:none;">
-      <iframe id="video-player-frame" allow="encrypted-media" allowfullscreen
+      <iframe id="video-player-frame" allow="encrypted-media; autoplay; picture-in-picture" allowfullscreen
         style="width:100%; height:360px; border-radius:8px; border:none; background:#000;"
         src="about:blank"></iframe>
+    </div>
+
+    <div id="video-ink-box" style="display:none;">
+      <div id="video-ink-container" style="width:100%; height:360px; border-radius:8px; background:#000; overflow:hidden;"></div>
     </div>
   `;
 
@@ -183,6 +263,8 @@
       playBtn.textContent = "جاري تجهيز المشغل...";
       playerBox.style.display = 'none';
       playerFrame.src = 'about:blank';
+      document.getElementById('video-ink-box').style.display = 'none';
+      document.getElementById('video-ink-container').innerHTML = '';
       statusEl.textContent = `جاري جلب بيانات الفيديو: ${video.name}`;
       statusEl.style.color = '#a6adc8';
 
@@ -207,24 +289,44 @@
 
         const detailData = await detailRes.json();
         const secObj = detailData.sectionable || detailData;
-        const otp = secObj.otp?.otp;
-        const playbackInfo = secObj.otp?.playbackInfo;
+        const platform = (secObj.platform || '').toLowerCase();
+        const source = secObj.source;
+        const otp = secObj.otp;
 
-        if (!otp || !playbackInfo) {
-          statusEl.textContent = "لم يتم العثور على بيانات التشغيل (OTP). الفيديو قد يكون مقفلاً.";
-          statusEl.style.color = "#f38ba8";
-          return;
+        if (platform === 'youtube') {
+          if (!source) throw new Error("لا يوجد مصدر فيديو YouTube.");
+          playerFrame.src = `https://www.youtube.com/embed/${encodeURIComponent(source)}?autoplay=1&rel=0`;
+          playerFrame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+          playerBox.style.display = 'block';
+          statusEl.textContent = '✅ يتم الآن تشغيل الفيديو (YouTube).';
+          statusEl.style.color = '#a6e3a1';
+        } else if (platform === 'ink') {
+          const otpVal = otp && otp.otp;
+          if (!otpVal || !source) {
+            statusEl.textContent = "لم يتم العثور على بيانات التشغيل (OTP). الفيديو قد يكون مقفلاً.";
+            statusEl.style.color = "#f38ba8";
+            return;
+          }
+          playInkrypt({ source }, otp);
+        } else {
+          // Default: VdoCipher (vdocipher platform)
+          const otpVal = otp && otp.otp;
+          const playbackInfo = otp && (otp.playbackInfo || otp.overrideInfo || '');
+          if (!otpVal || !playbackInfo) {
+            statusEl.textContent = "لم يتم العثور على بيانات التشغيل (OTP). الفيديو قد يكون مقفلاً.";
+            statusEl.style.color = "#f38ba8";
+            return;
+          }
+          const src = `https://player.vdocipher.com/v2/?otp=${encodeURIComponent(otpVal)}&playbackInfo=${encodeURIComponent(playbackInfo)}`;
+          playerFrame.allow = 'encrypted-media; autoplay; picture-in-picture';
+          playerFrame.src = src;
+          playerBox.style.display = 'block';
+          statusEl.textContent = '✅ يتم الآن تشغيل الفيديو.';
+          statusEl.style.color = '#a6e3a1';
         }
-
-        const src = `https://player.vdocipher.com/v2/?otp=${encodeURIComponent(otp)}&playbackInfo=${encodeURIComponent(playbackInfo)}`;
-        playerFrame.src = src;
-        playerBox.style.display = 'block';
-
-        statusEl.textContent = '✅ يتم الآن تشغيل الفيديو.';
-        statusEl.style.color = '#a6e3a1';
       } catch (err) {
         console.error("Error loading video:", err);
-        statusEl.textContent = "حدث خطأ أثناء تجهيز الفيديو.";
+        statusEl.textContent = err.message || "حدث خطأ أثناء تجهيز الفيديو.";
         statusEl.style.color = "#f38ba8";
       } finally {
         playBtn.disabled = false;
