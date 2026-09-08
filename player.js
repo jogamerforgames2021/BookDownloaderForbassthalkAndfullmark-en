@@ -62,10 +62,27 @@
       def(window.navigator, 'appVersion', chromeUA.replace('Mozilla/', ''));
       def(window.navigator, 'platform', 'Win32');
       def(window.navigator, 'vendor', 'Google Inc.');
-      if (window.navigator.userAgentData) {
-        try {
-          Object.defineProperty(window.navigator, 'userAgentData', { configurable: true, get: () => undefined });
-        } catch (e) {}
+      // The Inkrypt gate checks for Chrome via userAgentData in some versions;
+      // nulling it out made player construction throw -> black screen. Provide
+      // a Chrome-like brands object instead of undefined so those checks pass.
+      if (window.navigator.userAgentData !== undefined || 'userAgentData' in window.navigator) {
+        def(window.navigator, 'userAgentData', {
+          brands: [
+            { brand: 'Not/A)Brand', version: '24' },
+            { brand: 'Chromium', version: '124' },
+            { brand: 'Google Chrome', version: '124.0.0.0' }
+          ],
+          mobile: false,
+          platform: 'Windows',
+          getHighEntropyValues: () => Promise.resolve({
+            architecture: 'x64', platform: 'Windows', platformVersion: '10.0',
+            uaFullVersion: '124.0.0.0', fullVersionList: [
+              { brand: 'Not/A)Brand', version: '24.0.0.0' },
+              { brand: 'Chromium', version: '124.0.0.0' },
+              { brand: 'Google Chrome', version: '124.0.0.0' }
+            ]
+          })
+        });
       }
     } catch (e) {}
   }
